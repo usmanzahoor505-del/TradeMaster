@@ -1,0 +1,6 @@
+@TradeMasterPro.Api_HostAddress = http://localhost:5284
+
+GET {{TradeMasterPro.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

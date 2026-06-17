@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
+    --primary: 217.2 91.2% 59.8%;
+  }
+  
+  body {
+    background-color: #09090b;
+    color: #fafafa;
+  }
+}
+
+.glass {
+  background-color: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.text-gradient {
+  background-image: linear-gradient(to right, #60a5fa, #6366f1, #9333ea);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.neon-glow {
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.2);
+}
