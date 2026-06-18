@@ -127,6 +127,30 @@ public class SubscriptionsController : BaseApiController
         sub.StartDate = DateTime.UtcNow;
 
         _db.Subscriptions.Add(sub);
+
+        // Revenue share (PRD 3.2 / 3.3): credit the Pro teacher their commission
+        // (commissionRate is the teacher's share: 0.6 standard / 0.7 premium).
+        // Free teachers earn nothing.
+        if (string.Equals(teacher.Tier, "Pro", StringComparison.OrdinalIgnoreCase)
+            && plan.PriceUsd > 0 && plan.CommissionRate > 0)
+        {
+            var teacherShare = Math.Round(plan.PriceUsd * plan.CommissionRate, 2);
+            if (teacherShare > 0)
+            {
+                _db.Transactions.Add(new Transaction
+                {
+                    UserId = teacher.Id,
+                    Amount = teacherShare,
+                    Currency = "USD",
+                    Type = "credit",
+                    Status = "Completed",
+                    Gateway = "platform-commission",
+                    GatewayRef = $"commission_sub_plan:{plan.Id}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
         await _db.SaveChangesAsync();
         return Ok(sub);
     }

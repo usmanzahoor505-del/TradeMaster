@@ -34,4 +34,29 @@ public class PlansController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(plan);
     }
+
+    // Admin can update an existing plan (price / commission / features)
+    [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Update(int id, PlanUpdateDto req)
+    {
+        var plan = await _db.Plans.FindAsync(id);
+        if (plan == null) return NotFound(new { message = "Plan not found" });
+
+        if (!string.IsNullOrWhiteSpace(req.Name)) plan.Name = req.Name.Trim();
+        if (req.PriceUsd.HasValue) plan.PriceUsd = req.PriceUsd.Value;
+        if (req.CommissionRate.HasValue) plan.CommissionRate = req.CommissionRate.Value;
+        if (!string.IsNullOrWhiteSpace(req.FeaturesJson)) plan.FeaturesJson = req.FeaturesJson;
+
+        await _db.SaveChangesAsync();
+        return Ok(plan);
+    }
+}
+
+public class PlanUpdateDto
+{
+    public string? Name { get; set; }
+    public decimal? PriceUsd { get; set; }
+    public decimal? CommissionRate { get; set; }
+    public string? FeaturesJson { get; set; }
 }

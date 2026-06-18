@@ -2,11 +2,49 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Activity, Mail, Lock, ArrowRight, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Activity, Mail, Lock, ArrowRight, ShieldCheck, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { api } from "@/lib/api";
+import { saveAuth, homePathForRole, type AuthUser } from "@/lib/auth";
+
+interface LoginResponse {
+  token: string;
+  id: number;
+  name: string;
+  role: AuthUser["role"];
+  tier: string;
+}
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    setError(null);
+    if (!email.trim() || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.post<LoginResponse>(
+        "/api/auth/login",
+        { email: email.trim(), password },
+        { auth: false }
+      );
+      saveAuth(res.token, { id: res.id, name: res.name, role: res.role, tier: res.tier });
+      router.push(homePathForRole(res.role));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center relative overflow-hidden px-6 py-12">
@@ -66,6 +104,9 @@ export default function LoginPage() {
               <input
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                 className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/20 outline-none border border-white/8 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                 style={{ background: "rgba(0,0,0,0.35)" }}
               />
@@ -87,6 +128,9 @@ export default function LoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                 className="w-full rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-white/20 outline-none border border-white/8 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                 style={{ background: "rgba(0,0,0,0.35)" }}
               />
@@ -115,24 +159,35 @@ export default function LoginPage() {
           </label>
         </div>
 
+        {/* Error message */}
+        {error && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
         {/* Divider */}
         <div className="h-px bg-white/5 my-5" />
 
         {/* Submit Button */}
-        <Link href="/trade/BTC-USD">
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.97 }}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white transition-all group"
-            style={{
-              background: "#4f46e5",
-              boxShadow: "0 0 24px rgba(79,70,229,0.35)",
-            }}
-          >
-            Sign In
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </motion.button>
-        </Link>
+        <motion.button
+          onClick={handleLogin}
+          disabled={loading}
+          whileHover={{ scale: loading ? 1 : 1.01 }}
+          whileTap={{ scale: loading ? 1 : 0.97 }}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white transition-all group disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{
+            background: "#4f46e5",
+            boxShadow: "0 0 24px rgba(79,70,229,0.35)",
+          }}
+        >
+          {loading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Signing In…</>
+          ) : (
+            <>Sign In <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></>
+          )}
+        </motion.button>
 
         {/* OR Divider */}
         <div className="flex items-center gap-3 my-5">

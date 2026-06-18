@@ -10,5 +10,6 @@ public class User
     public string Tier { get; set; } = "Free";       // Free / Pro (teachers ke liye)
     public string Status { get; set; } = "Active";    // Active / Suspended / Banned
     public string? FcmToken { get; set; }             // Firebase Cloud Messaging Token
+    public bool IsFeatured { get; set; } = false;     // Admin-promoted featured teacher
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -164,6 +164,9 @@ public class PaymentsController : BaseApiController
                             };
                             _db.Subscriptions.Add(sub);
                         }
+
+                        // Revenue share to the Pro teacher
+                        await RecordTeacherCommissionAsync(teacherId, planId);
                     }
                 }
 
@@ -229,6 +232,9 @@ public class PaymentsController : BaseApiController
                             PaymentRef = tx.Id.ToString()
                         };
                         _db.Subscriptions.Add(sub);
+
+                        // Revenue share to the Pro teacher
+                        await RecordTeacherCommissionAsync(teacherId, planId);
                     }
                 }
 
@@ -242,6 +248,36 @@ public class PaymentsController : BaseApiController
         {
             return StatusCode(500, new { message = $"Webhook processing exception: {ex.Message}" });
         }
+    }
+
+    // Revenue share (PRD 3.2 / 3.3): when a student pays to subscribe to a Pro
+    // teacher, credit the teacher their share of the fee (commissionRate is the
+    // teacher's %: 0.6 standard / 0.7 premium). Platform retains the remainder.
+    // Free teachers earn nothing.
+    private async Task RecordTeacherCommissionAsync(int teacherId, int planId)
+    {
+        var teacher = await _db.Users.FindAsync(teacherId);
+        if (teacher == null || !string.Equals(teacher.Tier, "Pro", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var plan = await _db.Plans.FindAsync(planId);
+        if (plan == null || plan.PriceUsd <= 0 || plan.CommissionRate <= 0)
+            return;
+
+        var teacherShare = Math.Round(plan.PriceUsd * plan.CommissionRate, 2);
+        if (teacherShare <= 0) return;
+
+        _db.Transactions.Add(new Transaction
+        {
+            UserId = teacherId,
+            Amount = teacherShare,
+            Currency = "USD",
+            Type = "credit",
+            Status = "Completed",
+            Gateway = "platform-commission",
+            GatewayRef = $"commission_plan:{planId}",
+            CreatedAt = DateTime.UtcNow
+        });
     }
 
     private (int planId, int teacherId) ParseMetadata(Transaction tx)

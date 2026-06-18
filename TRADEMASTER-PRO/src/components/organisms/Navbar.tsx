@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Activity, Menu, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Activity, Menu, X, LogOut, Crown, Settings } from "lucide-react";
+import { getUser, logout, homePathForRole, type AuthUser } from "@/lib/auth";
+import { NotificationBell } from "@/components/organisms/NotificationBell";
 
 interface NavLink {
   href: string;
@@ -13,8 +15,9 @@ interface NavLink {
 }
 
 const NAV_LINKS: NavLink[] = [
+  { href: "/", label: "Home", matchPrefix: "/" },
+  { href: "/leaderboard", label: "Leaderboard", matchPrefix: "/leaderboard" },
   { href: "/markets", label: "Markets", matchPrefix: "/markets" },
-  { href: "/trade/BTC-USD", label: "Trade", matchPrefix: "/trade" },
   { href: "/portfolio", label: "Portfolio", matchPrefix: "/portfolio" },
 ];
 
@@ -41,7 +44,21 @@ const itemVariants = {
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Read auth state on mount + whenever the route changes (covers login/logout).
+  useEffect(() => {
+    setUser(getUser());
+  }, [pathname]);
+
+  function handleLogout() {
+    logout();
+    setUser(null);
+    setIsOpen(false);
+    router.push("/");
+  }
 
   // Defensive close on route change — covers browser back/forward too,
   // not just clicks on a Link (which already close it via onClick below).
@@ -80,7 +97,10 @@ export function Navbar() {
   }, []);
 
   const isActive = useCallback(
-    (link: NavLink) => pathname === link.href || pathname.startsWith(link.matchPrefix),
+    (link: NavLink) =>
+      link.matchPrefix === "/"
+        ? pathname === "/"
+        : pathname === link.href || pathname.startsWith(link.matchPrefix),
     [pathname]
   );
 
@@ -130,26 +150,72 @@ export function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Plans — guests see "Plans"; students see their active plan */}
+            {(!user || user.role === "Student") && (
+              <Link href="/pricing" className="relative px-3 py-2 rounded-lg">
+                {user ? (
+                  <span className="relative z-10 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                    <Crown className="w-3 h-3" />
+                    {user.tier || "Free"} Plan
+                  </span>
+                ) : (
+                  <span className="relative z-10 transition-colors hover:text-white">Plans</span>
+                )}
+              </Link>
+            )}
           </div>
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
-            <Link
-              href="/auth/login"
-              className="text-sm font-medium text-white hover:text-primary transition-colors"
-            >
-              Log In
-            </Link>
-            <Link href="/auth/register">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="relative px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg overflow-hidden group"
-              >
-                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 to-indigo-600 group-hover:opacity-80 transition-opacity" />
-                <span className="relative z-10">Get Started</span>
-              </motion.button>
-            </Link>
+            {user ? (
+              <>
+                <NotificationBell />
+                <Link
+                  href={homePathForRole(user.role)}
+                  className="flex items-center gap-2 text-sm font-medium text-white hover:text-primary transition-colors"
+                >
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/20 border border-primary/40 text-xs font-bold text-primary">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                  {user.name.split(" ")[0]}
+                </Link>
+                <Link
+                  href="/settings"
+                  className="flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-colors"
+                  aria-label="Settings"
+                  title="Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-white transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Log Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/auth/login"
+                  className="text-sm font-medium text-white hover:text-primary transition-colors"
+                >
+                  Log In
+                </Link>
+                <Link href="/auth/register">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="relative px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg overflow-hidden group"
+                  >
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 to-indigo-600 group-hover:opacity-80 transition-opacity" />
+                    <span className="relative z-10">Get Started</span>
+                  </motion.button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Icon */}
@@ -212,27 +278,85 @@ export function Navbar() {
                 </motion.div>
               ))}
 
+              {/* Plans — guests see "Plans"; students see their active plan */}
+              {(!user || user.role === "Student") && (
+                <motion.div variants={itemVariants}>
+                  <Link
+                    href="/pricing"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 text-lg font-bold text-white hover:text-primary transition-colors"
+                  >
+                    {user ? (
+                      <>
+                        <Crown className="w-4 h-4 text-primary" />
+                        {user.tier || "Free"} Plan
+                      </>
+                    ) : (
+                      "Plans"
+                    )}
+                  </Link>
+                </motion.div>
+              )}
+
               <motion.div variants={itemVariants}>
                 <hr className="border-white/10 my-2" />
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <Link
-                  href="/auth/login"
-                  onClick={() => setIsOpen(false)}
-                  className="block text-lg font-bold text-white hover:text-primary"
-                >
-                  Log In
-                </Link>
-              </motion.div>
+              {user ? (
+                <>
+                  <motion.div variants={itemVariants}>
+                    <Link
+                      href={homePathForRole(user.role)}
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-2 text-lg font-bold text-white hover:text-primary"
+                    >
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/20 border border-primary/40 text-xs font-bold text-primary">
+                        {user.name.charAt(0).toUpperCase()}
+                      </span>
+                      {user.name.split(" ")[0]}
+                    </Link>
+                  </motion.div>
+                  <motion.div variants={itemVariants}>
+                    <Link
+                      href="/settings"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-2 text-lg font-bold text-white hover:text-primary transition-colors"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Settings
+                    </Link>
+                  </motion.div>
+                  <motion.div variants={itemVariants}>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full py-3 mt-2 flex items-center justify-center gap-2 text-sm font-bold text-white border border-white/10 rounded-xl hover:bg-white/5"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Log Out
+                    </button>
+                  </motion.div>
+                </>
+              ) : (
+                <>
+                  <motion.div variants={itemVariants}>
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setIsOpen(false)}
+                      className="block text-lg font-bold text-white hover:text-primary"
+                    >
+                      Log In
+                    </Link>
+                  </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <Link href="/auth/register" onClick={() => setIsOpen(false)}>
-                  <button className="w-full py-3 mt-2 text-center text-sm font-bold text-white bg-primary rounded-xl">
-                    Get Started
-                  </button>
-                </Link>
-              </motion.div>
+                  <motion.div variants={itemVariants}>
+                    <Link href="/auth/register" onClick={() => setIsOpen(false)}>
+                      <button className="w-full py-3 mt-2 text-center text-sm font-bold text-white bg-primary rounded-xl">
+                        Get Started
+                      </button>
+                    </Link>
+                  </motion.div>
+                </>
+              )}
             </motion.div>
           </>
         )}

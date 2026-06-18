@@ -202,6 +202,42 @@ public class SignalsController : BaseApiController
             await _hubContext.Clients.Group($"Teacher_{CurrentUserId}").SendAsync("ReceiveSignal", signal);
         }
 
+        // Create in-app notification records for recipient students
+        List<int> recipientStudentIds;
+        if (string.Equals(teacher.Tier, "Free", StringComparison.OrdinalIgnoreCase))
+        {
+            recipientStudentIds = await _db.Users
+                .Where(u => u.Role == "Student")
+                .Select(u => u.Id)
+                .ToListAsync();
+        }
+        else
+        {
+            recipientStudentIds = await _db.Subscriptions
+                .Where(sub => sub.TeacherId == CurrentUserId && sub.Status == "Active")
+                .Select(sub => sub.StudentId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        var notifTitle = $"New Signal: {signal.Pair} ({signal.Action.ToUpper()})";
+        var notifMessage = $"{teacher.Name} posted a {signal.Action.ToUpper()} on {signal.Pair} · Entry {signal.EntryLow}-{signal.EntryHigh} | TP1 {signal.Tp1} | SL {signal.Sl}";
+        foreach (var sid in recipientStudentIds)
+        {
+            _db.Notifications.Add(new Notification
+            {
+                UserId = sid,
+                SignalId = signal.Id,
+                Title = notifTitle,
+                Message = notifMessage,
+                SentAt = DateTime.UtcNow
+            });
+        }
+        if (recipientStudentIds.Count > 0)
+        {
+            await _db.SaveChangesAsync();
+        }
+
         // Fetch recipient student tokens for FCM Push Notification
         List<string> studentTokens;
         if (string.Equals(teacher.Tier, "Free", StringComparison.OrdinalIgnoreCase))

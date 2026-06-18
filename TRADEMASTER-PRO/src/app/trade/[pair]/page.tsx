@@ -5,7 +5,6 @@ import { TradeHeader } from "@/components/organisms/TradeHeader";
 import { OrderBook } from "@/components/organisms/OrderBook";
 import { AdvancedChart } from "@/components/organisms/AdvancedChart";
 import { OpenOrders } from "@/components/organisms/OpenOrders";
-import { OrderForm } from "@/components/organisms/OrderForm";
 import { TickerTape } from "@/components/organisms/TickerTape";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -51,8 +50,8 @@ export default function TradingDashboard({
           <OrderBook />
         </div>
 
-        {/* Center — Chart + Open Orders (6 cols) */}
-        <div className="flex flex-col gap-1 lg:col-span-6 min-h-0 overflow-hidden">
+        {/* Center/Right — Chart + Open Orders (9 cols, buy/sell form removed) */}
+        <div className="flex flex-col gap-1 lg:col-span-9 min-h-0 overflow-hidden">
           {/* Chart takes remaining space */}
           <div className="flex-1 min-h-0 overflow-hidden">
             <AdvancedChart />
@@ -61,11 +60,6 @@ export default function TradingDashboard({
           <div className="h-64 shrink-0 overflow-hidden">
             <OpenOrders />
           </div>
-        </div>
-
-        {/* Right — Order Form (3 cols) */}
-        <div className="hidden lg:flex flex-col lg:col-span-3 min-h-0 overflow-hidden">
-          <OrderForm />
         </div>
 
       </div>
@@ -84,7 +78,7 @@ export default function TradingDashboard({
         }}
         aria-label="Mobile navigation"
       >
-        {["Chart", "Order Book", "Trade"].map((label) => (
+        {["Chart", "Order Book"].map((label) => (
           <button
             key={label}
             className="flex flex-col items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-white transition-colors px-4 py-1"

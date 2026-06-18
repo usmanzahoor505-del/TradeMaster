@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { getUser, homePathForRole, type AuthUser } from "@/lib/auth";
 
 const SLIDES = [
   {
@@ -46,6 +47,15 @@ const SLIDES = [
 
 export function HeroSlider() {
   const [current, setCurrent] = useState(0);
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  // Read auth state on mount (client only)
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
+
+  // Primary CTA: logged-in → their dashboard, guest → sign in
+  const primaryHref = user ? homePathForRole(user.role) : "/auth/login";
 
   // Auto-play slider every 5 seconds
   useEffect(() => {
@@ -120,7 +130,7 @@ export function HeroSlider() {
             transition={{ duration: 0.8, delay: 0.5 }}
             className="flex flex-col items-center gap-4 mt-12 sm:flex-row"
           >
-            <Link href={SLIDES[current].link1}>
+            <Link href={primaryHref}>
               <button className="flex items-center gap-2 px-8 py-4 text-base font-bold text-white transition-all rounded-xl bg-primary hover:bg-blue-600 neon-glow group">
                 {SLIDES[current].cta1}
                 <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />

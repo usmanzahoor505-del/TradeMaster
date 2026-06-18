@@ -3,10 +3,62 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck, Zap, GraduationCap, Loader2, AlertCircle } from "lucide-react";
+import { api } from "@/lib/api";
+import { saveAuth, homePathForRole, type AuthUser } from "@/lib/auth";
+
+type Role = "Student" | "Teacher";
+
+interface LoginResponse {
+  token: string;
+  id: number;
+  name: string;
+  role: AuthUser["role"];
+  tier: string;
+}
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<Role>("Student");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleRegister() {
+    setError(null);
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Please fill in your name, email, and password.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // 1. Create the account
+      await api.post(
+        "/api/auth/register",
+        { name: name.trim(), email: email.trim(), password, role },
+        { auth: false }
+      );
+      // 2. Auto-login to get a token, then go to the dashboard
+      const res = await api.post<LoginResponse>(
+        "/api/auth/login",
+        { email: email.trim(), password },
+        { auth: false }
+      );
+      saveAuth(res.token, { id: res.id, name: res.name, role: res.role, tier: res.tier });
+      router.push(homePathForRole(res.role));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const getStrength = (pw: string) => {
     let score = 0;
@@ -81,6 +133,40 @@ export default function RegisterPage() {
         {/* Form */}
         <div className="flex flex-col gap-4">
 
+          {/* Role Selector */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-white/60 uppercase tracking-wider">
+              I am joining as
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: "Student" as Role, label: "Student", sub: "Follow & copy signals", icon: GraduationCap },
+                { value: "Teacher" as Role, label: "Teacher", sub: "Publish signals", icon: ShieldCheck },
+              ]).map((opt) => {
+                const active = role === opt.value;
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setRole(opt.value)}
+                    className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all ${
+                      active
+                        ? "border-indigo-500/60 bg-indigo-500/10"
+                        : "border-white/8 bg-black/30 hover:border-white/20"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${active ? "text-indigo-400" : "text-white/40"}`} />
+                    <span className={`text-sm font-bold ${active ? "text-white" : "text-white/70"}`}>
+                      {opt.label}
+                    </span>
+                    <span className="text-[10px] text-white/30">{opt.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Full Name */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-semibold text-white/60 uppercase tracking-wider">
@@ -91,6 +177,8 @@ export default function RegisterPage() {
               <input
                 type="text"
                 placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/20 outline-none border border-white/8 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                 style={{ background: "rgba(0,0,0,0.35)" }}
               />
@@ -107,6 +195,8 @@ export default function RegisterPage() {
               <input
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/20 outline-none border border-white/8 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                 style={{ background: "rgba(0,0,0,0.35)" }}
               />
@@ -145,24 +235,35 @@ export default function RegisterPage() {
           </div>
         </div>
 
+        {/* Error message */}
+        {error && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
         {/* Divider */}
         <div className="h-px bg-white/5 my-5" />
 
         {/* Submit Button */}
-        <Link href="/trade/BTC-USD">
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.97 }}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white transition-all group"
-            style={{
-              background: "#4f46e5",
-              boxShadow: "0 0 24px rgba(79,70,229,0.35)",
-            }}
-          >
-            Create Account
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </motion.button>
-        </Link>
+        <motion.button
+          onClick={handleRegister}
+          disabled={loading}
+          whileHover={{ scale: loading ? 1 : 1.01 }}
+          whileTap={{ scale: loading ? 1 : 0.97 }}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white transition-all group disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{
+            background: "#4f46e5",
+            boxShadow: "0 0 24px rgba(79,70,229,0.35)",
+          }}
+        >
+          {loading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Creating Account…</>
+          ) : (
+            <>Create Account <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></>
+          )}
+        </motion.button>
 
         {/* Sign In Link */}
         <p className="mt-5 text-center text-xs text-white/25">

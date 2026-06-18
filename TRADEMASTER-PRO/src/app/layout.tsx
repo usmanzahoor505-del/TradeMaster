@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Providers } from "@/components/Providers";
 
 // ─── Fonts ────────────────────────────────────────────────────────────────────
 
@@ -178,9 +179,11 @@ export default function RootLayout({
         </div>
 
         {/* ── App Shell ──────────────────────────────────────────────────── */}
-        <main className="relative flex min-h-screen flex-col">
-          {children}
-        </main>
+        <Providers>
+          <main className="relative flex min-h-screen flex-col">
+            {children}
+          </main>
+        </Providers>
 
       </body>
     </html>

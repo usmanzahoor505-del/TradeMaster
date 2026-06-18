@@ -14,6 +14,17 @@ public class TransactionsController : BaseApiController
     private readonly AppDbContext _db;
     public TransactionsController(AppDbContext db) => _db = db;
 
+    // GET /api/transactions  (Admin only) — all transactions, for revenue analytics
+    [HttpGet]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAll()
+    {
+        var items = await _db.Transactions
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+        return Ok(items);
+    }
+
     // GET /api/transactions/user/2
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetByUser(int userId)

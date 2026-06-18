@@ -18,4 +18,26 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<ApiConnection> ApiConnections { get; set; }
     public DbSet<Post> Posts { get; set; }
+    public DbSet<Dispute> Disputes { get; set; }
+    public DbSet<PostLike> PostLikes { get; set; }
+    public DbSet<PostComment> PostComments { get; set; }
+    public DbSet<PostShare> PostShares { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // One like per (post, user) — enforces toggle semantics at the DB level.
+        modelBuilder.Entity<PostLike>()
+            .HasIndex(l => new { l.PostId, l.UserId })
+            .IsUnique();
+
+        // Indexes for the common feed/detail access paths (avoids table scans).
+        modelBuilder.Entity<PostLike>().HasIndex(l => l.UserId);
+        modelBuilder.Entity<PostComment>().HasIndex(c => c.PostId);
+        modelBuilder.Entity<PostComment>().HasIndex(c => c.ParentCommentId);
+        modelBuilder.Entity<PostShare>().HasIndex(s => s.PostId);
+        modelBuilder.Entity<Post>().HasIndex(p => p.CreatedAt);
+        modelBuilder.Entity<Post>().HasIndex(p => p.UserId);
+    }
 }

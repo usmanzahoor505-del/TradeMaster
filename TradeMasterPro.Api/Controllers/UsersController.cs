@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TradeMasterPro.Api.Data;
+using TradeMasterPro.Api.Models;
 
 namespace TradeMasterPro.Api.Controllers;
 
@@ -23,7 +24,7 @@ public class UsersController : BaseApiController
     public async Task<IActionResult> GetAll()
     {
         var users = await _db.Users
-            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.CreatedAt })
+            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.IsFeatured, u.CreatedAt })
             .ToListAsync();
         return Ok(users);
     }
@@ -35,9 +36,87 @@ public class UsersController : BaseApiController
     {
         var teachers = await _db.Users
             .Where(u => u.Role == "Teacher")
-            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.CreatedAt })
+            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.IsFeatured, u.CreatedAt })
             .ToListAsync();
         return Ok(teachers);
+    }
+
+    // GET /api/users/leaderboard  (public) — teachers ranked by win rate then subscribers
+    [HttpGet("leaderboard")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Leaderboard()
+    {
+        var teachers = await _db.Users
+            .Where(u => u.Role == "Teacher" && u.Status == "Active")
+            .ToListAsync();
+
+        var cards = new List<TeacherCardDto>();
+        foreach (var t in teachers)
+        {
+            cards.Add(await BuildTeacherCardAsync(t));
+        }
+
+        var ranked = cards
+            .OrderByDescending(c => c.WinRate)
+            .ThenByDescending(c => c.Subscribers)
+            .ThenByDescending(c => c.TotalSignals)
+            .ToList();
+
+        return Ok(ranked);
+    }
+
+    // GET /api/users/teacher/5/public  (public) — a teacher's public profile + track record
+    [HttpGet("teacher/{id:int}/public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PublicProfile(int id)
+    {
+        var teacher = await _db.Users.FindAsync(id);
+        if (teacher == null || teacher.Role != "Teacher")
+            return NotFound(new { message = "Teacher not found" });
+
+        var card = await BuildTeacherCardAsync(teacher);
+        var signals = await _db.Signals
+            .Where(s => s.TeacherId == id)
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(50)
+            .ToListAsync();
+
+        return Ok(new { profile = card, signals });
+    }
+
+    private async Task<TeacherCardDto> BuildTeacherCardAsync(User t)
+    {
+        var subscribers = await _db.Subscriptions
+            .CountAsync(s => s.TeacherId == t.Id && s.Status == "Active");
+
+        var signalIds = await _db.Signals
+            .Where(s => s.TeacherId == t.Id)
+            .Select(s => s.Id)
+            .ToListAsync();
+
+        // Win rate is derived from students' trade outcomes on this teacher's
+        // signals: every student Win raises it, every Loss lowers it.
+        var closedTrades = await _db.Trades
+            .Where(tr => signalIds.Contains(tr.SignalId) && tr.Outcome != "Open")
+            .ToListAsync();
+        var wins = closedTrades.Count(tr => tr.Outcome == "Win");
+        var winRate = closedTrades.Count > 0
+            ? Math.Round((double)wins / closedTrades.Count * 100, 1)
+            : 0;
+
+        return new TeacherCardDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            Tier = t.Tier,
+            IsFeatured = t.IsFeatured,
+            Subscribers = subscribers,
+            WinRate = winRate,
+            TotalSignals = signalIds.Count,
+            Wins = wins,
+            Closed = closedTrades.Count,
+            CreatedAt = t.CreatedAt
+        };
     }
 
     // GET /api/users/5
@@ -51,7 +130,7 @@ public class UsersController : BaseApiController
 
         var user = await _db.Users
             .Where(u => u.Id == id)
-            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.CreatedAt })
+            .Select(u => new { u.Id, u.Name, u.Email, u.Role, u.Tier, u.Status, u.IsFeatured, u.CreatedAt })
             .FirstOrDefaultAsync();
 
         if (user == null) return NotFound(new { message = "User not found" });
@@ -99,10 +178,15 @@ public class UsersController : BaseApiController
                 else if (string.Equals(status, "Banned", StringComparison.OrdinalIgnoreCase)) user.Status = "Banned";
                 else return BadRequest(new { message = "Invalid status value." });
             }
+
+            if (req.IsFeatured.HasValue)
+            {
+                user.IsFeatured = req.IsFeatured.Value;
+            }
         }
 
         await _db.SaveChangesAsync();
-        return Ok(new { message = "User updated successfully", user.Id, user.Name, user.Role, user.Tier, user.Status });
+        return Ok(new { message = "User updated successfully", user.Id, user.Name, user.Role, user.Tier, user.Status, user.IsFeatured });
     }
 
     [HttpPut("fcm-token")]
@@ -132,16 +216,21 @@ public class UsersController : BaseApiController
             .Where(s => s.TeacherId == id && s.Status == "Active")
             .CountAsync();
 
-        var signals = await _db.Signals
-            .Where(s => s.TeacherId == id && s.Status != "Active")
+        // Win rate from students' trade outcomes on this teacher's signals.
+        var teacherSignalIds = await _db.Signals
+            .Where(s => s.TeacherId == id)
+            .Select(s => s.Id)
             .ToListAsync();
-        
-        double winRate = 0;
-        if (signals.Count > 0)
-        {
-            int wins = signals.Count(s => s.Status == "Hit TP1" || s.Status == "Hit TP2" || s.Status == "Completed");
-            winRate = (double)wins / signals.Count * 100;
-        }
+
+        var closedTrades = await _db.Trades
+            .Where(tr => teacherSignalIds.Contains(tr.SignalId) && tr.Outcome != "Open")
+            .ToListAsync();
+
+        int wins = closedTrades.Count(tr => tr.Outcome == "Win");
+        int losses = closedTrades.Count(tr => tr.Outcome == "Loss");
+        double winRate = closedTrades.Count > 0
+            ? Math.Round((double)wins / closedTrades.Count * 100, 1)
+            : 0;
 
         var earnings = await _db.Transactions
             .Where(t => t.UserId == id && t.Status == "Completed" && t.Type == "credit")
@@ -150,8 +239,12 @@ public class UsersController : BaseApiController
         return Ok(new
         {
             Subscribers = subscribersCount,
-            WinRate = Math.Round(winRate, 1),
-            Earnings = earnings
+            WinRate = winRate,
+            Earnings = earnings,
+            Wins = wins,
+            Losses = losses,
+            ClosedTrades = closedTrades.Count,
+            TotalSignals = teacherSignalIds.Count
         });
     }
 }
@@ -162,9 +255,24 @@ public class UserUpdateDto
     public string? Role { get; set; }
     public string? Tier { get; set; }
     public string? Status { get; set; }
+    public bool? IsFeatured { get; set; }
 }
 
 public class FcmTokenRequest
 {
     public string Token { get; set; } = string.Empty;
+}
+
+public class TeacherCardDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Tier { get; set; } = string.Empty;
+    public bool IsFeatured { get; set; }
+    public int Subscribers { get; set; }
+    public double WinRate { get; set; }
+    public int TotalSignals { get; set; }
+    public int Wins { get; set; }
+    public int Closed { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
